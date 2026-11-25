@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cotilla — Ephemeral E2EE Burner Rooms</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Room Creation Landing (shown when no #room hash is present) -->
+  <div id="landing" class="overlay">
+    <div class="card">
+      <div class="badge-tag">Ephemeral &amp; Zero-Knowledge</div>
+      <h1>🔥 Cotilla</h1>
+      <p class="subtitle">End-to-End Encrypted WebRTC Burner Rooms. Zero persistence, zero databases, URL hash keying.</p>
+      
+      <div class="features-list">
+        <div>🔒 <strong>URL Hash Keying:</strong> Room key never touches any server</div>
+        <div>👥 <strong>WebRTC Mesh:</strong> Direct peer-to-peer data, audio &amp; video</div>
+        <div>💨 <strong>Ephemeral:</strong> When everyone leaves, the room ceases to exist</div>
+      </div>
+
+      <div class="actions">
+        <button id="btn-create-room" type="button" class="primary-btn">Create Burner Room</button>
+      </div>
+
+      <div class="join-divider"><span>OR</span></div>
+
+      <div class="join-box">
+        <input type="text" id="join-room-input" placeholder="Paste room link or #room=...&key=...">
+        <button id="btn-join-room" type="button" class="secondary-btn">Join</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Room App View -->
+  <div id="app">
+    <header class="app-header">
+      <div class="brand">
+        <h1>🔥 Cotilla</h1>
+        <span class="ephemeral-tag">Burner Room</span>
+      </div>
+
+      <div class="room-info">
+        <span class="room-label">Room:</span>
+        <code id="room-display">...</code>
+        <button id="btn-copy-link" type="button" class="small-btn">📋 Copy Invite Link</button>
+        <button id="btn-rotate-key" type="button" class="small-btn">🔄 Rotate Key</button>
+      </div>
+
+      <div class="user-status">
+        <span class="dot" id="status-dot"></span>
+        <span id="status-text">connecting...</span>
+        <code id="my-addr" title="Your Ed25519 Public Key">...</code>
+      </div>
+    </header>
+
+    <div class="media-bar" id="media-bar">
+      <div class="media-controls">
+        <button id="btn-voice" type="button" class="media-btn">🔊 Join Voice</button>
+        <button id="btn-mic" type="button" class="media-btn">🎤 Enable Mic</button>
+        <button id="btn-cam" type="button" class="media-btn">📷 Cam Off</button>
+        <button id="btn-screen" type="button" class="media-btn">🖥️ Share Screen</button>
+        <span id="sframe-lock-badge" class="sframe-badge" style="display: none;">🔒 E2EE SFrame</span>
+        <span id="active-target-badge" class="target-badge">Target: 📢 Group Room</span>
+      </div>
+      <div id="video-grid" class="video-grid" style="display: none;">
+        <div class="video-container" id="local-video-container" style="display: none;">
+          <video id="local-video" autoplay muted playsinline></video>
+          <div class="video-label" id="local-video-label">You (Local)</div>
+        </div>
+      </div>
+    </div>
+
+    <main class="app-main">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h2>Peers (<span id="peer-count">0</span>)</h2>
+        </div>
+        <ul id="peers-list" class="peers-list"></ul>
+        <div class="sidebar-footer">
+          <div class="legend">
+            <span><span class="dot-legend direct"></span> Direct P2P</span>
+            <span><span class="dot-legend relay"></span> Relayed</span>
+          </div>
+          <p class="footnote">In-memory ring buffer retains the last 50 messages for reconnect recovery.</p>
+        </div>
+      </aside>
+
+      <section class="chat-section">
+        <div class="session-tabs" id="session-tabs">
+          <button type="button" class="tab-btn active" data-session="main" id="tab-main">📢 Group Room</button>
+        </div>
+
+        <div class="chat-banner" id="chat-banner">
+          🔒 Messages are encrypted with the channel's MLS group key schedule (derived under RFC 9420 TreeKEM) and signed by Ed25519 identities.
+        </div>
+
+        <ul id="messages" class="messages-list"></ul>
+
+        <form id="composer" class="composer-form" autocomplete="off">
+          <label for="file-input" class="attach-btn" title="Attach file">
+            📎
+            <input type="file" id="file-input" style="display:none">
+          </label>
+          <input type="text" id="chat-input" placeholder="Type an ephemeral message..." autocomplete="off">
+          <button type="submit" id="send-btn" class="send-btn">Send</button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="dm-invite-modal" class="modal">
+    <div class="modal-box">
+      <h3 id="dm-modal-title">💬 Direct Message Invite</h3>
+      <p id="dm-modal-text">Peer ... invited you to a private 1:1 conversation.</p>
+      <div class="modal-actions">
+        <button id="btn-dm-decline" type="button" class="small-btn danger">Decline</button>
+        <button id="btn-dm-accept" type="button" class="small-btn primary">Accept & Join</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="wasm_exec.js"></script>
+  <script src="cotilla.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

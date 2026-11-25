@@ -1,0 +1,84 @@
+services:
+  signaling:
+    image: cotilla-server:testbench
+    container_name: cotilla-signaling
+    environment:
+      - COTILLA_MIN_ANCHORS=3
+      - COTILLA_STUN=
+    ports:
+      - "18080:8080"
+    networks:
+      - cotilla-bench
+
+  seeder:
+    image: cotilla-seeder:testbench
+    container_name: cotilla-seeder
+    command:
+      - "-url"
+      - "ws://signaling:8080/ws"
+      - "-bundle"
+      - "/app/dist/cotilla-svelte.html"
+      - "-manifest"
+      - "/app/dist/cotilla-svelte.manifest.json"
+      - "-key-file"
+      - "/app/dist/publisher.json"
+      - "-health"
+      - ":8081"
+    ports:
+      - "18084:8081"
+    depends_on:
+      - signaling
+    networks:
+      - cotilla-bench
+
+  alice:
+    image: cotilla-client:testbench
+    container_name: cotilla-alice
+    environment:
+      - CLIENT_NAME=alice
+      - SIGNALING_URL=ws://signaling:8080/ws
+      - ROOM_ID=bench-ephemeral-room-1234
+      - ROOM_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY
+      - PORT=8080
+    ports:
+      - "18081:8080"
+    depends_on:
+      - signaling
+    networks:
+      - cotilla-bench
+
+  bob:
+    image: cotilla-client:testbench
+    container_name: cotilla-bob
+    environment:
+      - CLIENT_NAME=bob
+      - SIGNALING_URL=ws://signaling:8080/ws
+      - ROOM_ID=bench-ephemeral-room-1234
+      - ROOM_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY
+      - PORT=8080
+    ports:
+      - "18082:8080"
+    depends_on:
+      - signaling
+    networks:
+      - cotilla-bench
+
+  charlie:
+    image: cotilla-client:testbench
+    container_name: cotilla-charlie
+    environment:
+      - CLIENT_NAME=charlie
+      - SIGNALING_URL=ws://signaling:8080/ws
+      - ROOM_ID=bench-ephemeral-room-1234
+      - ROOM_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY
+      - PORT=8080
+    ports:
+      - "18083:8080"
+    depends_on:
+      - signaling
+    networks:
+      - cotilla-bench
+
+networks:
+  cotilla-bench:
+    driver: bridge

@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Cotilla P2P Burner Chat</title>
+  <style>
+    :root {
+      color-scheme: dark light;
+      --bg-color: #0e0f12;
+      --panel-bg: #16181d;
+      --panel-border: #262930;
+      --text-main: #f0f2f5;
+      --text-muted: #8b92a0;
+      --brand-color: #5c7cfa;
+      --brand-hover: #4c6ef5;
+      --success-color: #40c057;
+      --danger-color: #fa5252;
+      accent-color: var(--brand-color);
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg-color: #f8f9fa;
+        --panel-bg: #ffffff;
+        --panel-border: #dee2e6;
+        --text-main: #212529;
+        --text-muted: #6c757d;
+        --brand-color: #3b5bdb;
+        --brand-hover: #364fc7;
+        --success-color: #2b8a3e;
+        --danger-color: #c92a2a;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    header {
+      background-color: var(--panel-bg);
+      border-bottom: 1px solid var(--panel-border);
+      padding: 0.75rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    h1 {
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+    .badge {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      background: var(--panel-border);
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .badge.active {
+      background: rgba(64, 192, 87, 0.15);
+      color: var(--success-color);
+    }
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    button {
+      background-color: var(--brand-color);
+      color: #ffffff;
+      border: none;
+      padding: 0.45rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: background-color 0.15s ease;
+    }
+    button:hover {
+      background-color: var(--brand-hover);
+    }
+    button.secondary {
+      background-color: transparent;
+      color: var(--text-main);
+      border: 1px solid var(--panel-border);
+    }
+    button.secondary:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+    button:focus-visible, input:focus-visible {
+      outline: 2px solid var(--brand-color);
+      outline-offset: 2px;
+    }
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 1rem;
+      gap: 1rem;
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .room-info-card {
+      background-color: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      font-size: 0.85rem;
+    }
+    .room-link-text {
+      font-family: monospace;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 500px;
+    }
+    #chat-log {
+      flex: 1;
+      background-color: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      overflow-y: auto;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      list-style: none;
+    }
+    .msg-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .msg-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .msg-author {
+      font-family: monospace;
+      font-weight: 600;
+      color: var(--brand-color);
+    }
+    .msg-author.me {
+      color: var(--success-color);
+    }
+    .msg-bubble {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.9rem;
+      line-height: 1.4;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    form#chat-form {
+      display: flex;
+      gap: 0.5rem;
+    }
+    #chat-input {
+      flex: 1;
+      background-color: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      color: var(--text-main);
+      padding: 0.65rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    #chat-input::placeholder {
+      color: var(--text-muted);
+    }
+    footer {
+      border-top: 1px solid var(--panel-border);
+      padding: 0.4rem 1rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: var(--panel-bg);
+    }
+    @media (forced-colors: active) {
+      button:focus-visible, input:focus-visible {
+        outline: 2px solid Highlight;
+      }
+      .badge, .msg-bubble, .room-info-card, #chat-log {
+        border: 1px solid CanvasText;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-title">
+      <h1>Cotilla P2P Chat</h1>
+      <span id="status-badge" class="badge" aria-live="polite">
+        <span aria-hidden="true">⟳</span> <span id="status-text">Connecting...</span>
+      </span>
+      <span id="swarm-badge" class="badge active" title="Active P2P Swarm Seeder">
+        <span aria-hidden="true">🌱</span> Swarm Seeding Active
+      </span>
+    </div>
+    <div class="actions">
+      <button id="btn-create-room" type="button" class="secondary">
+        <span aria-hidden="true">+</span> Create Burner Room
+      </button>
+    </div>
+  </header>
+
+  <main id="content" tabindex="-1">
+    <div id="room-card" class="room-info-card" style="display: none;">
+      <div>
+        <strong>Invite Link:</strong>
+        <span id="room-link-text" class="room-link-text"></span>
+      </div>
+      <button id="btn-copy-link" type="button" class="secondary">
+        <span aria-hidden="true">📋</span> Copy Link
+      </button>
+    </div>
+
+    <ul id="chat-log" aria-label="Chat messages" aria-live="polite">
+      <li class="msg-item">
+        <div class="msg-bubble" style="color: var(--text-muted); font-style: italic;">
+          Welcome to Cotilla Ephemeral Chat. App served securely over Cotilla P2P WebRTC mesh.
+        </div>
+      </li>
+    </ul>
+
+    <form id="chat-form">
+      <label for="chat-input" class="visually-hidden" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);">Message</label>
+      <input id="chat-input" type="text" placeholder="Type an encrypted message..." autocomplete="off" required>
+      <button id="btn-send" type="submit">
+        Send <span aria-hidden="true">→</span>
+      </button>
+    </form>
+  </main>
+
+  <footer>
+    <span id="peer-count">0 connected mesh peers</span>
+    <span id="app-version">Cotilla Web App</span>
+  </footer>
+
+  <!-- Cotilla client library (embedded at build time) -->
+  <script>
+/* __COTILLA_CLIENT_JS__ */
+  </script>
+
+  <script>
+    (function () {
+      "use strict";
+
+      const statusBadge = document.getElementById("status-badge");
+      const statusText = document.getElementById("status-text");
+      const peerCountEl = document.getElementById("peer-count");
+      const appVersionEl = document.getElementById("app-version");
+      const roomCard = document.getElementById("room-card");
+      const roomLinkText = document.getElementById("room-link-text");
+      const btnCopyLink = document.getElementById("btn-copy-link");
+      const btnCreateRoom = document.getElementById("btn-create-room");
+      const chatLog = document.getElementById("chat-log");
+      const chatForm = document.getElementById("chat-form");
+      const chatInput = document.getElementById("chat-input");
+
+      const bootstrap = window.__COTILLA_BOOTSTRAP__;
+      if (bootstrap && bootstrap.manifest) {
+        appVersionEl.textContent = `${bootstrap.manifest.app_id} v${bootstrap.manifest.version} (seq ${bootstrap.manifest.seq})`;
+      }
+
+      function updateStatus(text, isActive) {
+        statusText.textContent = text;
+        if (isActive) {
+          statusBadge.classList.add("active");
+          statusBadge.querySelector("span[aria-hidden='true']").textContent = "✓";
+        } else {
+          statusBadge.classList.remove("active");
+          statusBadge.querySelector("span[aria-hidden='true']").textContent = "⟳";
+        }
+      }
+
+      function appendMessage(author, text, isMe = false, ts = Date.now()) {
+        const li = document.createElement("li");
+        li.className = "msg-item";
+
+        const headerDiv = document.createElement("div");
+        headerDiv.className = "msg-header";
+
+        const authorSpan = document.createElement("span");
+        authorSpan.className = "msg-author" + (isMe ? " me" : "");
+        authorSpan.textContent = isMe ? "You" : author.slice(0, 8);
+
+        const timeSpan = document.createElement("span");
+        const date = new Date(ts);
+        timeSpan.textContent = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+        headerDiv.appendChild(authorSpan);
+        headerDiv.appendChild(timeSpan);
+
+        const bubbleDiv = document.createElement("div");
+        bubbleDiv.className = "msg-bubble";
+        bubbleDiv.textContent = text;
+
+        li.appendChild(headerDiv);
+        li.appendChild(bubbleDiv);
+
+        chatLog.appendChild(li);
+        chatLog.scrollTop = chatLog.scrollHeight;
+      }
+
+      const signalingProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const signalingUrl = `${signalingProtocol}//${window.location.host}/ws`;
+
+      const client = new window.CotillaClient({
+        signalingUrl: signalingUrl,
+        wasmUrl: "cotilla.wasm",
+      });
+
+      window.cotillaClient = client;
+
+      client.on("sessionStarted", (ev) => {
+        updateStatus("Room active", true);
+        const link = `${window.location.origin}${window.location.pathname}#room=${ev.roomID}&key=${ev.roomKey}`;
+        roomLinkText.textContent = link;
+        roomCard.style.display = "flex";
+      });
+
+      client.on("peersChanged", (ev) => {
+        const count = ev.peers ? ev.peers.length : 0;
+        peerCountEl.textContent = `${count} connected peer${count === 1 ? "" : "s"}`;
+      });
+
+      client.on("message", (msg) => {
+        const isMe = client.me && msg.author === client.me.address;
+        appendMessage(msg.author, msg.text, isMe, msg.ts);
+      });
+
+      btnCopyLink.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(roomLinkText.textContent);
+          const orig = btnCopyLink.textContent;
+          btnCopyLink.textContent = "Copied!";
+          setTimeout(() => { btnCopyLink.textContent = orig; }, 2000);
+        } catch {
+          btnCopyLink.textContent = "Copy failed";
+        }
+      });
+
+      btnCreateRoom.addEventListener("click", async () => {
+        const wasm = await client.loadWasm();
+        const res = window.CotillaClient.parseCotillaJSON(wasm.createRoom());
+        window.location.hash = `#room=${res.roomID}&key=${res.roomKey}`;
+        await client.startSession(res.roomID, res.roomKey, null, true);
+      });
+
+      chatForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const text = chatInput.value.trim();
+        if (!text) return;
+        try {
+          client.sendMessage(text);
+          chatInput.value = "";
+        } catch (err) {
+          console.error("send message failed:", err);
+        }
+      });
+
+      // Initialize session based on URL hash or default
+      async function init() {
+        updateStatus("Loading runtime...", false);
+        await client.loadWasm();
+        const hash = window.location.hash;
+        if (hash.includes("room=") && hash.includes("key=")) {
+          updateStatus("Joining room...", false);
+          try {
+            await client.joinRoomFromLink(hash);
+          } catch (err) {
+            console.error("joinRoomFromLink error:", err);
+            updateStatus("Failed to join room", false);
+          }
+        } else {
+          updateStatus("Ready (no room joined)", false);
+        }
+      }
+
+      init().catch((err) => {
+        console.error("Chat init error:", err);
+        updateStatus("Init error", false);
+      });
+    })();
+  </script>
+</body>
+</html>

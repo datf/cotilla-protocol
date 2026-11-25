@@ -1,0 +1,5 @@
+FROM docker.io/library/alpine:latest
+RUN apk add --no-cache ca-certificates
+COPY bin/cotilla-test-client /usr/local/bin/cotilla-test-client
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/cotilla-test-client"]

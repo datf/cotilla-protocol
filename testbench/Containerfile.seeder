@@ -1,0 +1,6 @@
+FROM docker.io/library/alpine:latest
+RUN apk add --no-cache ca-certificates
+COPY bin/cotilla-seeder /usr/local/bin/cotilla-seeder
+COPY dist /app/dist
+EXPOSE 8081
+ENTRYPOINT ["/usr/local/bin/cotilla-seeder"]

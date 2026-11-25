@@ -1,0 +1,8 @@
+FROM docker.io/library/alpine:latest
+RUN apk add --no-cache ca-certificates
+WORKDIR /app
+COPY bin/cotilla-server /usr/local/bin/cotilla-server
+COPY web /app/web
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/cotilla-server"]
+CMD ["-addr", ":8080", "-web", "/app/web"]

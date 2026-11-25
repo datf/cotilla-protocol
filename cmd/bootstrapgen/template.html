@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>Cotilla</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      color-scheme: dark light;
+      --bg: #0b0c0e;
+      --track: rgba(255, 255, 255, 0.08);
+      --fill: #4c6ef5;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8f9fa;
+        --track: rgba(0, 0, 0, 0.08);
+        --fill: #3b5bdb;
+      }
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      background-color: var(--bg);
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+    }
+    progress {
+      width: 220px;
+      height: 4px;
+      border: none;
+      border-radius: 2px;
+      background-color: var(--track);
+      color: var(--fill);
+      accent-color: var(--fill);
+      overflow: hidden;
+    }
+    progress::-webkit-progress-bar {
+      background-color: var(--track);
+      border-radius: 2px;
+    }
+    progress::-webkit-progress-value {
+      background-color: var(--fill);
+      border-radius: 2px;
+      transition: width 0.15s ease-out;
+    }
+    progress::-moz-progress-bar {
+      background-color: var(--fill);
+      border-radius: 2px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      progress::-webkit-progress-value {
+        transition: none;
+      }
+    }
+    @media (forced-colors: active) {
+      progress {
+        border: 1px solid CanvasText;
+      }
+    }
+  </style>
+</head>
+<body>
+  <progress id="progress-bar" aria-label="Loading application"></progress>
+
+  <script>
+/* __WASM_EXEC_JS__ */
+  </script>
+
+  <script>
+    (function () {
+      "use strict";
+
+      const PINNED_PUB_KEY = "__PINNED_PUB_KEY__";
+      const APP_ID = "__APP_ID__";
+      const CHANNEL = "__CHANNEL__";
+      const DIST_ROOM_ID = "__DIST_ROOM_ID__";
+
+      const progressBar = document.getElementById("progress-bar");
+
+      let ws = null;
+      let downloadedBundle = false;
+      let identity = null;
+      let joinRes = null;
+      let wasmBytes = null;
+      let wasmModule = null;
+      let pollInterval = null;
+
+      async function bootstrap() {
+        console.debug("[bootstrap] initializing WebAssembly core...");
+        if (!wasmModule) {
+          const wasmResp = await fetch("cotilla.wasm");
+          if (!wasmResp.ok) {
+            throw new Error("Failed to fetch cotilla.wasm: " + wasmResp.status);
+          }
+          wasmBytes = new Uint8Array(await wasmResp.arrayBuffer());
+          wasmModule = await WebAssembly.compile(wasmBytes);
+        }
+
+        const go = new Go();
+        const instance = await WebAssembly.instantiate(wasmModule, go.importObject);
+        go.run(instance);
+
+        while (!window.cotilla) {
+          await new Promise((r) => setTimeout(r, 15));
+        }
+
+        console.debug("[bootstrap] initializing identity and distribution channel...");
+        const cotillaConfig = {
+          protocol: {
+            maxPeers: 12,
+            minPublicGroupPeers: 2,
+            minPrivateGroupPeers: 6,
+            initialBroadcastTTL: 1,
+            initialBroadcastFanout: 2,
+            publicGroupTTL: 6,
+            privateGroupTTL: 3,
+          },
+          app: {
+            appName: APP_ID,
+            minSeq: 1,
+            validSignatures: PINNED_PUB_KEY ? [PINNED_PUB_KEY] : [],
+            seederGroup: {
+              name: DIST_ROOM_ID,
+              channel: CHANNEL,
+            },
+          },
+        };
+        const initRes = JSON.parse(window.cotilla.init({ protocol: cotillaConfig.protocol }));
+        identity = { address: initRes.address, signPub: initRes.signPub };
+
+        joinRes = JSON.parse(window.cotilla.bootstrapApp(cotillaConfig.app));
+
+        window.cotilla.setOnAttachmentProgress((fileID, received, total) => {
+          console.debug(`[bootstrap] chunk progress: ${received}/${total}`);
+          if (progressBar) {
+            progressBar.max = total;
+            progressBar.value = received;
+          }
+        });
+
+        window.cotilla.setOnAppManifest((manifestJSON, from) => {
+          console.debug("[bootstrap] discovered manifest from seeder:", from);
+        });
+
+        window.cotilla.setOnOpen((addr) => {
+          console.debug("[bootstrap] WebRTC peer open:", addr);
+          if (window.cotilla.isGatewayPeer && window.cotilla.isGatewayPeer(addr)) {
+            console.debug("[bootstrap] gateway peer open, querying peers:", addr);
+            if (window.cotilla.addGatewayPeer) window.cotilla.addGatewayPeer(addr);
+            if (window.cotilla.addPeer) window.cotilla.addPeer(addr);
+            if (window.cotilla.queryPeers) window.cotilla.queryPeers();
+            return;
+          }
+          if (window.cotilla.addPeer) {
+            window.cotilla.addPeer(addr);
+          }
+          if (window.cotilla.requestAppManifest) {
+            window.cotilla.requestAppManifest();
+          }
+        });
+
+        if (window.cotilla.setOnPeerLeft) {
+          window.cotilla.setOnPeerLeft((addr) => {
+            console.debug("[bootstrap] peer left:", addr);
+            if (!downloadedBundle && !ws) {
+              setTimeout(connectSignaling, 2000);
+            }
+          });
+        }
+
+        window.cotilla.setOnAppBundleReady((manifestJSON, bundleU8) => {
+          if (downloadedBundle) return;
+          downloadedBundle = true;
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
+
+          console.debug("[bootstrap] validating publisher signature & digest...");
+          const verifyRes = JSON.parse(window.cotilla.verifyAppBundle(
+            manifestJSON, bundleU8, PINNED_PUB_KEY, APP_ID, CHANNEL, 1
+          ));
+
+          if (verifyRes.error) {
+            console.error("[bootstrap] bundle verification rejected:", verifyRes.error);
+            downloadedBundle = false;
+            return;
+          }
+
+          console.debug("[bootstrap] bundle verified. Launching application...");
+
+          const preservedHash = window.location.hash;
+          const parsedManifest = JSON.parse(manifestJSON);
+          const signalingProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+          const bootSignalingUrl = `${signalingProto}//${window.location.host}/ws`;
+          const decoder = new TextDecoder("utf-8");
+          const appHtml = decoder.decode(bundleU8);
+
+          // Defer shutdown and document replacement until after Go's syscall/js callback returns.
+          setTimeout(() => {
+            if (ws) {
+              wsIntentionalClose = true;
+              try { ws.close(); } catch {}
+              ws = null;
+            }
+
+            if (window.cotilla && window.cotilla.shutdown) {
+              window.cotilla.shutdown();
+            }
+
+            window.__COTILLA_BOOTSTRAP__ = {
+              version: 1,
+              wasmBytes: wasmBytes,
+              wasmModule: wasmModule,
+              manifest: parsedManifest,
+              bundleBytes: bundleU8,
+              pinnedPubKeyHex: PINNED_PUB_KEY,
+              distRoomID: DIST_ROOM_ID,
+              distRoomKey: joinRes.room_key,
+              signalingUrl: bootSignalingUrl,
+            };
+
+            document.open();
+            document.write(appHtml);
+            document.close();
+
+            if (window.location.hash !== preservedHash) {
+              window.location.hash = preservedHash;
+            }
+          }, 0);
+        });
+
+        connectSignaling();
+      }
+
+      let wsIntentionalClose = false;
+
+      function connectSignaling() {
+        if (downloadedBundle) return;
+
+        const signalingProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const signalingUrl = `${signalingProtocol}//${window.location.host}/ws`;
+
+        console.debug("[bootstrap] connecting signaling:", signalingUrl);
+        wsIntentionalClose = false;
+        ws = new WebSocket(signalingUrl);
+
+        ws.onopen = () => {
+          console.debug("[bootstrap] signaling connected, registering...");
+          const regMsg = JSON.parse(window.cotilla.signSignaling("register", "", ""));
+          ws.send(JSON.stringify(regMsg));
+
+          if (!pollInterval) {
+            pollInterval = setInterval(() => {
+              if (downloadedBundle) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+                return;
+              }
+              if (window.cotilla && window.cotilla.queryPeers) {
+                window.cotilla.queryPeers();
+              }
+              if (window.cotilla && window.cotilla.requestAppManifest) {
+                window.cotilla.requestAppManifest();
+              }
+            }, 1500);
+          }
+        };
+
+        ws.onmessage = async (ev) => {
+          let msg;
+          try {
+            msg = JSON.parse(ev.data);
+          } catch {
+            return;
+          }
+
+          if (msg.error) {
+            console.debug("[bootstrap] signaling error:", msg.error);
+            return;
+          }
+
+          if (msg.type === "offer") {
+            if (window.cotilla.verifySignaling && !window.cotilla.verifySignaling(ev.data)) {
+              console.debug("[bootstrap] dropped unverified offer from", msg.peer);
+              return;
+            }
+            if (window.cotilla.addGatewayPeer) {
+              window.cotilla.addGatewayPeer(msg.peer);
+            }
+            try {
+              const answerSDP = await window.cotilla.acceptOffer(msg.peer, msg.sdp);
+              if (answerSDP && !String(answerSDP).startsWith("error:")) {
+                const answerMsg = JSON.parse(window.cotilla.signSignaling("answer", msg.peer, answerSDP));
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify(answerMsg));
+                }
+              }
+            } catch (err) {
+              console.debug("[bootstrap] acceptOffer failed for", msg.peer, err);
+            }
+            return;
+          }
+
+          if (msg.type === "ok") {
+            console.debug("[bootstrap] signaling handshake complete, closing WS");
+            wsIntentionalClose = true;
+            try { ws.close(); } catch {}
+            ws = null;
+            return;
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.debug("[bootstrap] signaling socket error:", err);
+        };
+
+        ws.onclose = () => {
+          const intentional = wsIntentionalClose;
+          ws = null;
+          if (!intentional && !downloadedBundle) {
+            console.debug("[bootstrap] signaling closed, retrying in 2s...");
+            setTimeout(connectSignaling, 2000);
+          }
+        };
+      }
+
+      bootstrap().catch((err) => {
+        console.debug("[bootstrap] error:", err);
+        setTimeout(bootstrap, 2000);
+      });
+    })();
+  </script>
+</body>
+</html>
