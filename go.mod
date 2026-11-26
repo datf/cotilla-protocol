@@ -5,14 +5,14 @@ go 1.27.0
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/pion/rtp v1.10.6
-	github.com/pion/webrtc/v4 v4.2.26
+	github.com/pion/webrtc/v4 v4.2.29
 	golang.org/x/crypto v0.59.0
 )
 
 require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/pion/datachannel v1.6.4 // indirect
-	github.com/pion/dtls/v3 v3.1.15 // indirect
+	github.com/pion/dtls/v3 v3.1.16 // indirect
 	github.com/pion/ice/v4 v4.4.9 // indirect
 	github.com/pion/interceptor v0.1.51 // indirect
 	github.com/pion/logging v0.2.4 // indirect
