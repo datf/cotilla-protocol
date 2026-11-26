@@ -3,7 +3,13 @@ COMPOSE ?= podman compose
 
 .PHONY: all bin build up down test test-svelte test-browser clean logs
 
-all: bin build down up test test-browser down
+all: build
+	$(COMPOSE) down -v
+	$(COMPOSE) up -d
+	@status=0; \
+		./bin/runner && $(MAKE) test-browser || status=$$?; \
+		$(COMPOSE) down -v; \
+		exit $$status
 
 bin:
 	mkdir -p bin
