@@ -1,6 +1,6 @@
 [submodule "svelte"]
 	path = svelte
-	url = git@github.com:datf/p2p-chat-web-client.git
+	url = https://github.com/datf/p2p-chat-web-client.git
 [submodule "cotilla-bootstrap"]
 	path = cotilla-bootstrap
-	url = git@github.com:datf/cotilla-bootstrap.git
+	url = https://github.com/datf/cotilla-bootstrap.git
