@@ -88,7 +88,7 @@ bootstrap-svelte: svelte-bundle cotilla-bootstrap/node_modules/.package-lock.jso
 test: bootstrap
 	$(GO) test ./...
 
-tests: test
+tests: test perf testbench
 
 ## perf: run full performance, capacity, hop-limit, island-prevention, and Go 1.27 goroutineleak suites
 perf:
