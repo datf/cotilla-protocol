@@ -96,6 +96,26 @@ async function waitForSeederReady(timeoutMs = 20000) {
   logFail(`Timed out waiting for cotilla-seeder at ${SEEDER_URL}/health`);
 }
 
+function referencesHostInText(text, expectedHost) {
+  if (!text || !expectedHost) {
+    return false;
+  }
+
+  const urlMatches = text.match(/https?:\/\/[^\s)"'<>]+/gi) || [];
+  for (const candidate of urlMatches) {
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.hostname === expectedHost) {
+        return true;
+      }
+    } catch (_) {
+      // Ignore unparsable candidates.
+    }
+  }
+
+  return false;
+}
+
 function attachStrictObservers(page, label, opts = {}) {
   const state = {
     pageErrors: [],
@@ -123,7 +143,7 @@ function attachStrictObservers(page, label, opts = {}) {
     }
     if (type === "error") {
       // Offline Google Fonts stylesheet fails to resolve in isolated container networks.
-      if (text.includes("ERR_NAME_NOT_RESOLVED") || text.includes("fonts.googleapis.com")) {
+      if (text.includes("ERR_NAME_NOT_RESOLVED") || referencesHostInText(text, "fonts.googleapis.com")) {
         return;
       }
       if (opts.allowConsoleErrorPredicate && opts.allowConsoleErrorPredicate(text)) {
