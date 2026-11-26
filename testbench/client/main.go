@@ -764,6 +764,8 @@ func (a *ClientApp) handleShareFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	const maxGeneratedAttachmentSize = 10 * 1024 * 1024
+
 	var data []byte
 	if body.DataB64 != "" {
 		d, err := base64.StdEncoding.DecodeString(body.DataB64)
@@ -775,6 +777,10 @@ func (a *ClientApp) handleShareFile(w http.ResponseWriter, r *http.Request) {
 	} else {
 		if body.SizeBytes <= 0 {
 			body.SizeBytes = 128 * 1024
+		}
+		if body.SizeBytes > maxGeneratedAttachmentSize {
+			http.Error(w, "Requested attachment is too large", http.StatusBadRequest)
+			return
 		}
 		data = make([]byte, body.SizeBytes)
 		_, _ = io.ReadFull(rand.Reader, data)
