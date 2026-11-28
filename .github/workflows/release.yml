@@ -170,10 +170,11 @@ jobs:
           path: wasm-release
 
       - name: Publish to npm
+        working-directory: wasm-release
         run: |
-          tgz="$(ls wasm-release/datf-cotilla-wasm-*.tgz)"
+          tgz="$(ls datf-cotilla-wasm-*.tgz)"
           tag_flag=""
-          if [[ "${{ github.event.release.prerelease }}" == "true" || "${{ github.event.release.tag_name }}" == *-* ]]; then
-            tag_flag="--tag next"
+          if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
+            tag_flag="--tag stage"
           fi
-          npm publish "${tgz}" --provenance --access public ${tag_flag}
+          npm publish "./${tgz}" --provenance --access public ${tag_flag}
