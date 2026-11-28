@@ -152,7 +152,13 @@ release-bin:
 	[ -f README.md ] && cp README.md "$$stage/"; \
 	[ -f LICENSE ] && cp LICENSE "$$stage/"; \
 	if [ "$$os" = "windows" ]; then \
-		(cd "$(RELEASE_DIST)/stage-$$os-$$arch" && zip -q -r "$(CURDIR)/$(RELEASE_DIST)/$$base.zip" "$$base"); \
+		if command -v zip >/dev/null 2>&1; then \
+			(cd "$(RELEASE_DIST)/stage-$$os-$$arch" && zip -q -r "../$$base.zip" "$$base"); \
+		elif command -v 7z >/dev/null 2>&1; then \
+			(cd "$(RELEASE_DIST)/stage-$$os-$$arch" && 7z a -tzip -bso0 -bsp0 "../$$base.zip" "$$base"); \
+		else \
+			powershell.exe -NoProfile -Command "Compress-Archive -Path '$(RELEASE_DIST)/stage-$$os-$$arch/$$base' -DestinationPath '$(RELEASE_DIST)/$$base.zip' -Force"; \
+		fi; \
 	else \
 		tar -C "$(RELEASE_DIST)/stage-$$os-$$arch" -czf "$(RELEASE_DIST)/$$base.tar.gz" "$$base"; \
 	fi; \
@@ -187,7 +193,13 @@ release-clib: clib
 	mkdir -p "$$stage"; \
 	cp "$(CLIB_DIST)/libcotilla.$(CLIB_EXT)" "$(CLIB_DIST)/libcotilla.h" "$$stage/"; \
 	if [ "$(HOST_GOOS)" = "windows" ]; then \
-		(cd "$(RELEASE_DIST)/stage-clib" && zip -q -r "$(CURDIR)/$(RELEASE_DIST)/$$base.zip" "$$base"); \
+		if command -v zip >/dev/null 2>&1; then \
+			(cd "$(RELEASE_DIST)/stage-clib" && zip -q -r "../$$base.zip" "$$base"); \
+		elif command -v 7z >/dev/null 2>&1; then \
+			(cd "$(RELEASE_DIST)/stage-clib" && 7z a -tzip -bso0 -bsp0 "../$$base.zip" "$$base"); \
+		else \
+			powershell.exe -NoProfile -Command "Compress-Archive -Path '$(RELEASE_DIST)/stage-clib/$$base' -DestinationPath '$(RELEASE_DIST)/$$base.zip' -Force"; \
+		fi; \
 	else \
 		tar -C "$(RELEASE_DIST)/stage-clib" -czf "$(RELEASE_DIST)/$$base.tar.gz" "$$base"; \
 	fi; \
