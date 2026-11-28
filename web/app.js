@@ -602,7 +602,7 @@ function formatBytes(bytes) {
 
 function createSaveLink(blobUrl, name) {
   const a = document.createElement("a");
-  if (isSafeBlobUrl(blobUrl)) {
+  if (typeof blobUrl === "string" && state.blobUrls.has(blobUrl) && isSafeBlobUrl(blobUrl)) {
     a.href = blobUrl;
   }
   a.download = name;
@@ -717,7 +717,11 @@ function appendAttachment(meta, dataOrBlobUrl, mine) {
 
   let blobUrl = "";
   const mime = meta.mime || meta.MIME || "application/octet-stream";
-  if (typeof dataOrBlobUrl === "string" && dataOrBlobUrl.startsWith("blob:")) {
+  if (
+    typeof dataOrBlobUrl === "string" &&
+    dataOrBlobUrl.startsWith("blob:") &&
+    state.blobUrls.has(dataOrBlobUrl)
+  ) {
     blobUrl = trackBlobUrl(dataOrBlobUrl);
   } else if (dataOrBlobUrl instanceof Uint8Array || dataOrBlobUrl instanceof ArrayBuffer) {
     const blob = new Blob([dataOrBlobUrl], { type: mime });
