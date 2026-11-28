@@ -1,0 +1,173 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version override for dry-run (e.g. v0.1.0-rc.1)'
+        required: false
+        default: 'v0.0.0-manual'
+
+permissions:
+  contents: read
+
+jobs:
+  releases-matrix:
+    name: Build Binaries (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, windows, darwin, freebsd]
+        goarch: [amd64, arm64, "386"]
+        exclude:
+          - goos: darwin
+            goarch: "386"
+          - goos: windows
+            goarch: arm64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build release archive
+        env:
+          VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
+        run: |
+          make release-bin \
+            VERSION="${VERSION}" \
+            TARGET_GOOS="${{ matrix.goos }}" \
+            TARGET_GOARCH="${{ matrix.goarch }}"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: bin-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/release/cotilla-*
+          if-no-files-found: error
+
+  release-wasm:
+    name: Build WASM Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: 'wasm/package.json'
+
+      - name: Verify zero forbidden WASM dependencies
+        run: |
+          if GOOS=js GOARCH=wasm go list -deps ./wasm | grep -E "pion|websocket|net/http|crypto/tls"; then
+            echo "ERROR: forbidden WASM dependency detected"
+            exit 1
+          fi
+
+      - name: Build WASM release artifacts
+        env:
+          VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
+        run: make release-wasm VERSION="${VERSION}"
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: wasm-artifacts
+          path: dist/release/*
+          if-no-files-found: error
+
+  release-clib:
+    name: Build C Shared Library (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build clib release archive
+        shell: bash
+        env:
+          VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
+        run: make release-clib VERSION="${VERSION}"
+
+      - name: Upload clib artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: clib-${{ matrix.os }}
+          path: dist/release/cotilla-clib-*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release Assets
+    runs-on: ubuntu-latest
+    needs: [releases-matrix, release-wasm, release-clib]
+    permissions:
+      contents: write
+    steps:
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate unified SHA256SUMS.txt
+        working-directory: release-assets
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload assets to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-npm:
+    name: Publish @datf/cotilla-wasm to npm
+    runs-on: ubuntu-latest
+    needs: [release-wasm]
+    if: github.event_name == 'release'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: 'wasm/package.json'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Download WASM package artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-artifacts
+          path: wasm-release
+
+      - name: Publish to npm
+        run: npm publish wasm-release/datf-cotilla-wasm-*.tgz --provenance --access public

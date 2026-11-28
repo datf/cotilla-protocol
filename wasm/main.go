@@ -3,10 +3,27 @@
 // Command wasm builds the Cotilla protocol core and browser WebRTC transport for WebAssembly execution.
 package main
 
-import "syscall/js"
+import (
+	"encoding/json"
+	"syscall/js"
+
+	"github.com/datf/cotilla-protocol/internal/buildinfo"
+)
+
+func jsVersion(this js.Value, args []js.Value) any {
+	raw, _ := json.Marshal(map[string]string{
+		"version": buildinfo.Version,
+		"commit":  buildinfo.Commit,
+		"date":    buildinfo.Date,
+	})
+	return string(raw)
+}
 
 func register() {
 	c := map[string]any{
+		// Build metadata
+		"version": js.FuncOf(jsVersion),
+
 		// Identity & Overlay
 		"init":              js.FuncOf(jsInit),
 		"shutdown":          js.FuncOf(jsShutdown),

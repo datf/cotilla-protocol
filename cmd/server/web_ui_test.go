@@ -1041,47 +1041,47 @@ vm.runInContext(workerCode, vm.createContext(selfCtx), { filename: "sframe-worke
 }
 
 func TestBootstrap_StrictlyTwoFilesAndInlinedWasmExec(t *testing.T) {
-	// Verify bootstrap directory structure
-	entries, err := os.ReadDir(filepath.Join("..", "..", "bootstrap"))
+	// Verify dist/bootstrap directory structure
+	entries, err := os.ReadDir(filepath.Join("..", "..", "dist", "bootstrap"))
 	if err != nil {
-		t.Fatalf("read bootstrap dir: %v", err)
+		t.Fatalf("read dist/bootstrap dir: %v", err)
 	}
 	if len(entries) != 2 {
 		var names []string
 		for _, e := range entries {
 			names = append(names, e.Name())
 		}
-		t.Fatalf("bootstrap must contain strictly 2 files, got %d: %v", len(entries), names)
+		t.Fatalf("dist/bootstrap must contain strictly 2 files, got %d: %v", len(entries), names)
 	}
 	names := map[string]bool{entries[0].Name(): true, entries[1].Name(): true}
 	if !names["cotilla.wasm"] || !names["index.html"] {
-		t.Fatalf("bootstrap must contain strictly cotilla.wasm and index.html, got: %v", names)
+		t.Fatalf("dist/bootstrap must contain strictly cotilla.wasm and index.html, got: %v", names)
 	}
 
 	// Verify index.html content
-	htmlBytes, err := os.ReadFile(filepath.Join("..", "..", "bootstrap", "index.html"))
+	htmlBytes, err := os.ReadFile(filepath.Join("..", "..", "dist", "bootstrap", "index.html"))
 	if err != nil {
-		t.Fatalf("read bootstrap/index.html: %v", err)
+		t.Fatalf("read dist/bootstrap/index.html: %v", err)
 	}
 	htmlStr := string(htmlBytes)
 	if strings.Contains(htmlStr, "/* __WASM_EXEC_JS__ */") {
-		t.Errorf("bootstrap/index.html contains un-substituted __WASM_EXEC_JS__")
+		t.Errorf("dist/bootstrap/index.html contains un-substituted __WASM_EXEC_JS__")
 	}
 	if strings.Contains(htmlStr, "__PINNED_PUB_KEY__") {
-		t.Errorf("bootstrap/index.html contains un-substituted __PINNED_PUB_KEY__")
+		t.Errorf("dist/bootstrap/index.html contains un-substituted __PINNED_PUB_KEY__")
 	}
 	if !strings.Contains(htmlStr, "class Go {") && !strings.Contains(htmlStr, "globalThis.Go = class") {
-		t.Errorf("bootstrap/index.html does not contain inlined Go wasm_exec runtime")
+		t.Errorf("dist/bootstrap/index.html does not contain inlined Go wasm_exec runtime")
 	}
 
-	// Verify dist bundle and signed manifest
-	bundleBytes, err := os.ReadFile(filepath.Join("..", "..", "dist", "cotilla-chat.html"))
+	// Verify dist/apps bundle and signed manifest
+	bundleBytes, err := os.ReadFile(filepath.Join("..", "..", "dist", "apps", "cotilla-chat.html"))
 	if err != nil {
-		t.Fatalf("read dist/cotilla-chat.html: %v", err)
+		t.Fatalf("read dist/apps/cotilla-chat.html: %v", err)
 	}
-	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "dist", "cotilla-chat.manifest.json"))
+	manifestBytes, err := os.ReadFile(filepath.Join("..", "..", "dist", "apps", "cotilla-chat.manifest.json"))
 	if err != nil {
-		t.Fatalf("read dist/cotilla-chat.manifest.json: %v", err)
+		t.Fatalf("read dist/apps/cotilla-chat.manifest.json: %v", err)
 	}
 
 	var manifest cot.AppManifest
@@ -1096,7 +1096,7 @@ func TestBootstrap_StrictlyTwoFilesAndInlinedWasmExec(t *testing.T) {
 }
 
 func TestBootstrap_SignalingStaticServing(t *testing.T) {
-	fs := http.FileServer(http.Dir(filepath.Join("..", "..", "bootstrap")))
+	fs := http.FileServer(http.Dir(filepath.Join("..", "..", "dist", "bootstrap")))
 	handler := withWasmMime(fs)
 
 	// 1. GET / -> index.html
@@ -1133,21 +1133,21 @@ func TestBootstrap_NodeHarnessEndToEnd(t *testing.T) {
 		t.Skip("node binary not available for bootstrap browser harness")
 	}
 
-	bootstrapPath := filepath.Join("..", "..", "bootstrap", "index.html")
-	manifestPath := filepath.Join("..", "..", "dist", "cotilla-chat.manifest.json")
-	bundlePath := filepath.Join("..", "..", "dist", "cotilla-chat.html")
+	bootstrapPath := filepath.Join("..", "..", "dist", "bootstrap", "index.html")
+	manifestPath := filepath.Join("..", "..", "dist", "apps", "cotilla-chat.manifest.json")
+	bundlePath := filepath.Join("..", "..", "dist", "apps", "cotilla-chat.html")
 
 	bootstrapBytes, err := os.ReadFile(bootstrapPath)
 	if err != nil {
-		t.Fatalf("read bootstrap/index.html: %v", err)
+		t.Fatalf("read dist/bootstrap/index.html: %v", err)
 	}
 	manifestBytes, err := os.ReadFile(manifestPath)
 	if err != nil {
-		t.Fatalf("read dist/cotilla-chat.manifest.json: %v", err)
+		t.Fatalf("read dist/apps/cotilla-chat.manifest.json: %v", err)
 	}
 	bundleBytes, err := os.ReadFile(bundlePath)
 	if err != nil {
-		t.Fatalf("read dist/cotilla-chat.html: %v", err)
+		t.Fatalf("read dist/apps/cotilla-chat.html: %v", err)
 	}
 
 	// Verify bootstrap UI contains only the minimalistic progress bar (no verbose logs or cards)

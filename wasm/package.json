@@ -1,0 +1,22 @@
+{
+  "name": "@datf/cotilla-wasm",
+  "version": "0.0.0-dev",
+  "description": "Cotilla ephemeral P2P protocol WebAssembly core binary",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/datf/cotilla-protocol.git"
+  },
+  "engines": {
+    "node": "26"
+  },
+  "files": [
+    "cotilla.wasm",
+    "wasm_exec.js"
+  ],
+  "exports": {
+    "./cotilla.wasm": "./cotilla.wasm",
+    "./wasm_exec.js": "./wasm_exec.js",
+    "./package.json": "./package.json"
+  }
+}

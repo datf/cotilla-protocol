@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/datf/cotilla-protocol/internal/buildinfo"
 	cot "github.com/datf/cotilla-protocol/pkg/cotilla"
 	"github.com/datf/cotilla-protocol/pkg/cotillartc"
 )
@@ -528,8 +529,9 @@ func runServerWithListenerAndSTUN(ctx context.Context, ln net.Listener, webDir s
 }
 
 func main() {
+	showVersion := flag.Bool("version", false, "print build version and exit")
 	addr := flag.String("addr", ":8080", "listen address")
-	webDir := flag.String("web", "web", "directory of static client assets")
+	webDir := flag.String("web", "dist/web", "directory of static client assets")
 	defaultSTUN := "stun:stun.l.google.com:19302"
 	if envSTUN, ok := os.LookupEnv("COTILLA_STUN"); ok {
 		defaultSTUN = envSTUN
@@ -539,6 +541,11 @@ func main() {
 	introAnchors := flag.Int("intro-anchors", envIntOrDefault("COTILLA_INTRO_ANCHORS", defaultIntroFanout), "maximum number of anchors introduced per newcomer")
 	pprofAddr := flag.String("pprof", "", "optional pprof HTTP listen address (e.g. 127.0.0.1:6060)")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("cotilla-server %s\n", buildinfo.String())
+		return
+	}
 
 	if *pprofAddr != "" {
 		go startPprofServer(*pprofAddr)

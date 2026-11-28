@@ -13,10 +13,10 @@ all: build
 
 bin:
 	mkdir -p bin
-	$(MAKE) -C .. bootstrap-svelte
-	rm -rf web && cp -r ../web ./web
-	mkdir -p web/svelte && cp ../cotilla-bootstrap/dist/index.html ./web/svelte/index.html
-	rm -rf dist && mkdir -p dist && cp ../dist/cotilla-svelte.html ../dist/cotilla-svelte.manifest.json ../dist/publisher.json ./dist/
+	$(MAKE) -C .. web bootstrap-svelte
+	rm -rf web && cp -r ../dist/web ./web
+	mkdir -p web/svelte && cp ../dist/apps/cotilla-svelte-bootstrap.html ./web/svelte/index.html
+	rm -rf dist && mkdir -p dist && cp ../dist/apps/cotilla-svelte.html ../dist/apps/cotilla-svelte.manifest.json ../dist/dev/publisher.json ./dist/
 	CGO_ENABLED=0 go build -o bin/cotilla-server ../cmd/server
 	CGO_ENABLED=0 go build -o bin/cotilla-test-client ./client
 	CGO_ENABLED=0 go build -o bin/cotilla-seeder ../cmd/seeder

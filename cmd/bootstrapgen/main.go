@@ -19,22 +19,29 @@ type publisherKeyFile struct {
 	PrivKeyHex string `json:"priv_hex"`
 }
 
-func getWasmExecJS() ([]byte, error) {
-	// First try web/wasm_exec.js if present
-	if data, err := os.ReadFile("web/wasm_exec.js"); err == nil && len(data) > 0 {
-		return data, nil
+func getWasmExecJS(explicit string) ([]byte, error) {
+	if explicit != "" {
+		if data, err := os.ReadFile(explicit); err == nil && len(data) > 0 {
+			return data, nil
+		}
+		return nil, fmt.Errorf("read explicit wasm_exec.js %q: file not found or empty", explicit)
 	}
-	// Try go env GOROOT
 	cmd := exec.Command("go", "env", "GOROOT")
 	out, err := cmd.Output()
-	if err == nil {
-		goroot := strings.TrimSpace(string(out))
-		p := filepath.Join(goroot, "lib", "wasm", "wasm_exec.js")
+	if err != nil {
+		return nil, fmt.Errorf("run go env GOROOT: %w", err)
+	}
+	goroot := strings.TrimSpace(string(out))
+	for _, rel := range []string{
+		filepath.Join("lib", "wasm", "wasm_exec.js"),
+		filepath.Join("misc", "wasm", "wasm_exec.js"),
+	} {
+		p := filepath.Join(goroot, rel)
 		if data, err := os.ReadFile(p); err == nil && len(data) > 0 {
 			return data, nil
 		}
 	}
-	return nil, fmt.Errorf("wasm_exec.js not found in web/ or GOROOT")
+	return nil, fmt.Errorf("wasm_exec.js not found in GOROOT (%s)", goroot)
 }
 
 func main() {
@@ -42,10 +49,11 @@ func main() {
 		templatePath = flag.String("template", "cmd/bootstrapgen/template.html", "Path to bootstrap HTML template")
 		chatSrcPath  = flag.String("chat-src", "apps/basic-chat/index.html", "Path to basic chat app source HTML")
 		cotillaJS    = flag.String("cotilla-js", "web/cotilla.js", "Path to cotilla.js client library")
-		keyFilePath  = flag.String("key-file", "dist/publisher.json", "Path to publisher keypair JSON file")
-		bundleOut    = flag.String("bundle-out", "dist/cotilla-chat.html", "Output path for bundled chat app HTML")
-		manifestOut  = flag.String("manifest-out", "dist/cotilla-chat.manifest.json", "Output path for signed AppManifest JSON")
-		bootstrapOut = flag.String("bootstrap-out", "bootstrap/index.html", "Output path for bootstrap index.html")
+		wasmExecPath = flag.String("wasm-exec", "", "Optional explicit path to Go wasm_exec.js")
+		keyFilePath  = flag.String("key-file", "dist/dev/publisher.json", "Path to publisher keypair JSON file")
+		bundleOut    = flag.String("bundle-out", "dist/apps/cotilla-chat.html", "Output path for bundled chat app HTML")
+		manifestOut  = flag.String("manifest-out", "dist/apps/cotilla-chat.manifest.json", "Output path for signed AppManifest JSON")
+		bootstrapOut = flag.String("bootstrap-out", "dist/bootstrap/index.html", "Output path for bootstrap index.html")
 		appID        = flag.String("app-id", "cotilla-chat", "Application ID")
 		channel      = flag.String("channel", cotilla.DefaultAppChannel, "Distribution channel")
 		distRoomID   = flag.String("dist-room", cotilla.DefaultAppDistRoomID, "Distribution room ID")
@@ -55,11 +63,10 @@ func main() {
 	flag.Parse()
 
 	// Ensure output directories exist
-	if err := os.MkdirAll(filepath.Dir(*bundleOut), 0755); err != nil {
-		log.Fatalf("mkdir %s: %v", filepath.Dir(*bundleOut), err)
-	}
-	if err := os.MkdirAll(filepath.Dir(*bootstrapOut), 0755); err != nil {
-		log.Fatalf("mkdir %s: %v", filepath.Dir(*bootstrapOut), err)
+	for _, outPath := range []string{*bundleOut, *manifestOut, *bootstrapOut, *keyFilePath} {
+		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+			log.Fatalf("mkdir %s: %v", filepath.Dir(outPath), err)
+		}
 	}
 
 	// 1. Assemble basic chat app bundle (inlines web/cotilla.js)
@@ -109,7 +116,7 @@ func main() {
 	log.Printf("Signed manifest: %s (app: %s, fileID: %s, sha256: %s)", *manifestOut, manifest.AppID, manifest.FileID, manifest.SHA256[:16])
 
 	// 4. Read wasm_exec.js and template.html
-	wasmExecJS, err := getWasmExecJS()
+	wasmExecJS, err := getWasmExecJS(*wasmExecPath)
 	if err != nil {
 		log.Fatalf("get wasm_exec.js: %v", err)
 	}

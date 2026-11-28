@@ -373,18 +373,18 @@ func (h *testHub) handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 // TestSeederDaemon_SvelteBundleDistribution exercises seeding the real compiled Svelte single-file
-// application bundle (dist/cotilla-svelte.html) over WebRTC to 3+ client peers.
+// application bundle (dist/apps/cotilla-svelte.html) over WebRTC to 3+ client peers.
 func TestSeederDaemon_SvelteBundleDistribution(t *testing.T) {
-	bundlePath := filepath.Join("..", "..", "dist", "cotilla-svelte.html")
-	manifestPath := filepath.Join("..", "..", "dist", "cotilla-svelte.manifest.json")
+	bundlePath := filepath.Join("..", "..", "dist", "apps", "cotilla-svelte.html")
+	manifestPath := filepath.Join("..", "..", "dist", "apps", "cotilla-svelte.manifest.json")
 
 	bundleBytes, err := os.ReadFile(bundlePath)
 	if err != nil {
-		t.Skipf("dist/cotilla-svelte.html not present (run make svelte-bundle): %v", err)
+		t.Skipf("dist/apps/cotilla-svelte.html not present (run make svelte-bundle): %v", err)
 	}
 	manifestBytes, err := os.ReadFile(manifestPath)
 	if err != nil {
-		t.Fatalf("read dist/cotilla-svelte.manifest.json: %v", err)
+		t.Fatalf("read dist/apps/cotilla-svelte.manifest.json: %v", err)
 	}
 
 	var manifest cotilla.AppManifest

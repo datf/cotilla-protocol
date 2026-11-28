@@ -32,17 +32,17 @@ make submodules
 
 ```bash
 # 1. Build cotilla-server, cotilla-seeder, signed Svelte single-file bundle,
-#    and single-file gzip-WASM bootstrap (cotilla-bootstrap/dist/index.html)
+#    and single-file gzip-WASM bootstrap (cotilla-bootstrap/dist/index.html + dist/apps/)
 make server bootstrap-svelte
 
 # 2. Terminal 1 — Start the zero-knowledge signaling gateway serving the bootstrap page
-./bin/cotilla-server -addr :8080 -web cotilla-bootstrap/dist
+./dist/bin/cotilla-server -addr :8080 -web cotilla-bootstrap/dist
 
 # 3. Terminal 2 — Start the headless P2P app seeder
-./bin/cotilla-seeder \
+./dist/bin/cotilla-seeder \
   -url ws://127.0.0.1:8080/ws \
-  -bundle dist/cotilla-svelte.html \
-  -manifest dist/cotilla-svelte.manifest.json \
+  -bundle dist/apps/cotilla-svelte.html \
+  -manifest dist/apps/cotilla-svelte.manifest.json \
   -health :8081
 ```
 
@@ -53,35 +53,47 @@ Open `http://localhost:8080/` in your browser. The minimalistic single-file boot
 Apps remain fully functional without a seeder by design:
 
 ```bash
-make server wasm
-pnpm --prefix svelte run build
-./bin/cotilla-server -addr :8080 -web svelte/build
+make server svelte-build
+./dist/bin/cotilla-server -addr :8080 -web svelte/build
 ```
 
 ### Option C: Classic Static Web Client or 2-File Bootstrap
 
 ```bash
-# Serve the classic web/ client directly (serves /cotilla.wasm gzipped automatically)
+# Serve the classic web client staged into dist/web/ (serves /cotilla.wasm gzipped automatically)
 make run
 
-# Or build and serve the strictly 2-file bootstrap/ directory (index.html + cotilla.wasm)
+# Or build and serve the strictly 2-file dist/bootstrap/ directory (index.html + cotilla.wasm)
 make server bootstrap
-./bin/cotilla-server -addr :8080 -web bootstrap
-./bin/cotilla-seeder \
+./dist/bin/cotilla-server -addr :8080 -web dist/bootstrap
+./dist/bin/cotilla-seeder \
   -url ws://127.0.0.1:8080/ws \
-  -bundle dist/cotilla-chat.html \
-  -manifest dist/cotilla-chat.manifest.json
+  -bundle dist/apps/cotilla-chat.html \
+  -manifest dist/apps/cotilla-chat.manifest.json
 ```
 
-### Optional: Native Overlay Node & Live Go 1.27 `pprof` Diagnostics
+### Optional: Native Overlay Node, Build Artifacts & Live Go 1.27 `pprof` Diagnostics
+
+All generated outputs live under `dist/` (`dist/bin/`, `dist/wasm/`, `dist/web/`, `dist/bootstrap/`, `dist/apps/`, `dist/clib/`, `dist/dev/`, `dist/release/`):
 
 ```bash
 # Run a standalone native overlay node
-go run ./cmd/node -signaling ws://127.0.0.1:8080/ws -port 8082
+make node && ./dist/bin/cotilla-node -signaling ws://127.0.0.1:8080/ws -port 8082
+
+# Print embedded version metadata on any binary
+./dist/bin/cotilla-server -version
+./dist/bin/cotilla-seeder -print-version
+./dist/bin/cotilla-node -version
+
+# Build the publishable @datf/cotilla-wasm package (cotilla.wasm, wasm_exec.js, package.json)
+make release-wasm VERSION=v0.1.0
+
+# Cross-compile multi-arch release binaries (pure Go, CGO_ENABLED=0)
+make release-bin VERSION=v0.1.0 TARGET_GOOS=linux TARGET_GOARCH=arm64
 
 # Enable opt-in pprof (/debug/pprof/goroutineleak and /debug/pprof/heap) on any binary:
-./bin/cotilla-server -addr :8080 -web cotilla-bootstrap/dist -pprof 127.0.0.1:6060
-./bin/cotilla-seeder -url ws://127.0.0.1:8080/ws -bundle dist/cotilla-svelte.html -manifest dist/cotilla-svelte.manifest.json -pprof 127.0.0.1:6061
+./dist/bin/cotilla-server -addr :8080 -web cotilla-bootstrap/dist -pprof 127.0.0.1:6060
+./dist/bin/cotilla-seeder -url ws://127.0.0.1:8080/ws -bundle dist/apps/cotilla-svelte.html -manifest dist/apps/cotilla-svelte.manifest.json -pprof 127.0.0.1:6061
 ```
 
 ---

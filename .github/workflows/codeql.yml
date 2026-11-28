@@ -91,9 +91,7 @@ jobs:
       shell: bash
       run: |
         make init
-        make submodules
-        make server bootstrap bootstrap-svelte
-        make all
+        make bins wasm web bootstrap bootstrap-svelte
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4

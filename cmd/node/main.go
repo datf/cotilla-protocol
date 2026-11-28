@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/pprof"
@@ -19,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/datf/cotilla-protocol/internal/buildinfo"
 	cot "github.com/datf/cotilla-protocol/pkg/cotilla"
 	rtc "github.com/datf/cotilla-protocol/pkg/cotillartc"
 )
@@ -104,12 +106,18 @@ func newNodeDaemon(id *cot.Identity, signalingURL string, stuns []string, roomID
 }
 
 func main() {
+	showVersion := flag.Bool("version", false, "print build version and exit")
 	signalingURL := flag.String("signaling", "ws://localhost:8080/ws", "signaling WebSocket URL")
 	port := flag.String("port", "8081", "HTTP health/status listen port")
 	stunServer := flag.String("stun", "stun:stun.l.google.com:19302", "STUN server URL")
 	seed := flag.String("seed", "", "identity seed (optional hex)")
 	pprofAddr := flag.String("pprof", "", "optional pprof HTTP listen address (e.g. 127.0.0.1:6062)")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("cotilla-node %s\n", buildinfo.String())
+		return
+	}
 
 	if *pprofAddr != "" {
 		go func() {

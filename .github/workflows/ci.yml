@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go-test:
+    name: Go Tests, Race & WASM Deps
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Verify zero forbidden WASM dependencies
+        run: |
+          if GOOS=js GOARCH=wasm go list -deps ./wasm | grep -E "pion|websocket|net/http|crypto/tls"; then
+            echo "ERROR: forbidden WASM dependency detected"
+            exit 1
+          fi
+
+      - name: Build bootstrap and run Go tests
+        run: make test
+
+      - name: Run race detector suite
+        run: go test -race -short -count=1 ./internal/perfcheck ./pkg/cotilla ./pkg/cotillartc ./cmd/server ./cmd/seeder ./cmd/node
+
+  web-submodules:
+    name: Web Submodules (Svelte & Bootstrap)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: 'svelte/package.json'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: 'svelte/package.json'
+
+      - name: Install submodule dependencies and build web bundles
+        run: make init wasm server bootstrap-svelte svelte-build
+
+      - name: Run Svelte typecheck and live server test
+        run: |
+          pnpm --prefix svelte check
+          pnpm --prefix svelte test
+
+  cross-build-check:
+    name: Cross-Compile Matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Cross-compile all release targets and host clib
+        run: |
+          for target in \
+            linux/amd64 linux/arm64 linux/386 \
+            windows/amd64 windows/386 \
+            darwin/amd64 darwin/arm64 \
+            freebsd/amd64 freebsd/arm64 freebsd/386; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            echo "Building ${os}/${arch}..."
+            make release-bin VERSION=ci TARGET_GOOS="${os}" TARGET_GOARCH="${arch}"
+          done
+          make release-wasm VERSION=ci
+          make release-clib VERSION=ci

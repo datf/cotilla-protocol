@@ -1,11 +1,6 @@
-# build output (server binary, c-shared libcotilla.so/.h)
-/bin/
-# generated wasm + glue (rebuild with `make wasm`)
+# Unified build & release artifacts (rebuilt via `make`)
+/dist/
 /testbench/bin/
 /testbench/web/
 /testbench/dist/
 /vendor/
-/dist/
-/bootstrap/
-cotilla.wasm
-wasm_exec.js

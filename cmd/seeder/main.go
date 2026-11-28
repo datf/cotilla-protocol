@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/datf/cotilla-protocol/internal/buildinfo"
 	"github.com/datf/cotilla-protocol/pkg/cotilla"
 	"github.com/datf/cotilla-protocol/pkg/cotillartc"
 )
@@ -45,8 +46,9 @@ type SeederDaemon struct {
 
 func main() {
 	var (
-		keygenMode = flag.Bool("keygen", false, "Generate an Ed25519 publisher keypair and exit")
-		keyOut     = flag.String("key-out", "publisher.json", "Output file for -keygen")
+		printVersion = flag.Bool("print-version", false, "Print seeder build version and exit")
+		keygenMode   = flag.Bool("keygen", false, "Generate an Ed25519 publisher keypair and exit")
+		keyOut       = flag.String("key-out", "publisher.json", "Output file for -keygen")
 
 		signMode   = flag.Bool("sign", false, "Sign an application bundle and generate AppManifest JSON")
 		bundleFlag = flag.String("bundle", "", "Path to the application bundle (e.g. dist/cotilla-chat.html)")
@@ -69,6 +71,11 @@ func main() {
 		pprofFlag     = flag.String("pprof", "", "Optional pprof HTTP listen address (e.g. 127.0.0.1:6061)")
 	)
 	flag.Parse()
+
+	if *printVersion {
+		fmt.Printf("cotilla-seeder %s\n", buildinfo.String())
+		return
+	}
 
 	if *pprofFlag != "" {
 		go func() {

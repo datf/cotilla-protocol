@@ -7,7 +7,7 @@ Cotilla uses a multi-layered testing strategy combining Go unit/protocol tests, 
 ## 1. Quick Start Commands
 
 ```bash
-# 1. Fast Go unit & protocol tests (build bootstrap/ first so cmd/server bootstrap tests pass)
+# 1. Fast Go unit & protocol tests (build dist/bootstrap/ first so cmd/server bootstrap tests pass)
 make bootstrap && go test -short -count=1 ./...
 
 # 2. Race detector across protocol, signaling server, seeder, and node daemon
@@ -20,7 +20,7 @@ make perf
 make wasm && (GOOS=js GOARCH=wasm go list -deps ./wasm | grep -E "pion|websocket|net/http|crypto/tls" || echo "CLEAN: 0 forbidden WASM deps")
 
 # 5. Svelte 5 typecheck, store/platform unit tests, and live signaling server test
-make server && pnpm --prefix svelte check && pnpm --prefix svelte test
+make server svelte-build && pnpm --prefix svelte check && pnpm --prefix svelte test
 
 # 6. Full containerized Podman E2E test bench (native + Svelte bootstrap/seeder + browser interop)
 make testbench
@@ -59,7 +59,7 @@ Environment overrides let you scale sweeps up or down:
 `cmd/server`, `cmd/seeder`, and `cmd/node` accept an opt-in `-pprof <addr>` flag (disabled by default):
 
 ```bash
-./bin/cotilla-server -addr :8080 -web cotilla-bootstrap/dist -pprof 127.0.0.1:6060
+./dist/bin/cotilla-server -addr :8080 -web cotilla-bootstrap/dist -pprof 127.0.0.1:6060
 curl http://127.0.0.1:6060/debug/pprof/goroutineleak?debug=2
 go tool pprof http://127.0.0.1:6060/debug/pprof/heap
 ```
@@ -74,14 +74,14 @@ Run with `go test -short -count=1 ./...` or with `-race`:
 - **Cryptographic Hardening (`pkg/cotilla/crypto_hardening_test.go`, `invite_test.go`):** Signed `PeerInfo`, context-bound AEAD AAD, constant-time chunk verification, Noise_IK forward-secret 1:1 DMs (`cotilla-invite-v2`), 5-minute `ReplayWindow`, and length-prefixed `EncodeCanonical`.
 - **MLS TreeKEM & Scaling (`pkg/cotilla/treekem_test.go`, `phase3_scaling_test.go`):** LBBT structure, Merkle `TreeHash`, Ed25519 KeyPackages, single-shot HPKE roundtrips, PFS/PCS strict epoch isolation, 20+ peer scaling, expanding-ring sync ($1 \to 2 \to 4 \to 8$), 15-minute `MessageTTL` catch-up, signed `ChannelInvite` lineage, and eviction lockout.
 - **Secondary WebRTC SFrame Calls (`pkg/cotilla/calls_test.go`, `pkg/cotilla/sframe_test.go`, `pkg/cotillartc/call_media_test.go`):** RFC 9605 SFrame `AES_128_GCM_SHA256_128` keying via `MLS-Exporter`, multi-peer call isolation vs. 1:1 DMs, eviction revocation, and native Pion loopback media tests.
-- **Signaling, Bootstrap & Seeder (`cmd/server/*_test.go`, `cmd/seeder/*_test.go`, `cmd/node/*_test.go`):** Strict 1:1 `/ws` handshake, anchor pool retention/promotion, strictly 2-file `bootstrap/` verification, HTTP gzip `/cotilla.wasm`, and end-to-end app bundle seeding.
+- **Signaling, Bootstrap & Seeder (`cmd/server/*_test.go`, `cmd/seeder/*_test.go`, `cmd/node/*_test.go`):** Strict 1:1 `/ws` handshake, anchor pool retention/promotion, strictly 2-file `dist/bootstrap/` verification, HTTP gzip `/cotilla.wasm`, and end-to-end app bundle seeding.
 
 ---
 
 ## 4. Svelte 5 Frontend & Live Server Tests (`svelte/`)
 
 ```bash
-make server
+make server svelte-build
 pnpm --prefix svelte check
 pnpm --prefix svelte test
 ```
@@ -90,7 +90,7 @@ Runs:
 1. `test_call_views.mjs`: Stage/carousel layout, FIFO screen share priority, active speaker ordering, and pinning.
 2. `test_format_and_platform.mjs`: Formatting, attachment normalization, invite parsing, notifications, UI store, RMS audio meters, gain mixer, and audio processing prefs.
 3. `test_store.mjs`: 3+ peer `CotillaStore` + real `CotillaClient` tests (hash auto-join, signed invites, group chat, 1:1 DM isolation, secondary WebRTC calls, eviction).
-4. `test_live_server.mjs`: Spawns `bin/cotilla-server -web build`, verifies `/` and `/cotilla.wasm`, and connects 3 peers over `/ws`.
+4. `test_live_server.mjs`: Spawns `dist/bin/cotilla-server -web build`, verifies `/` and `/cotilla.wasm`, and connects 3 peers over `/ws`.
 
 ---
 
