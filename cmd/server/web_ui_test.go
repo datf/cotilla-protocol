@@ -1466,8 +1466,8 @@ func min(a, b int) int {
 
 func TestCotillaBootstrap_SourceAndSingleFileBuild(t *testing.T) {
 	cbDir := filepath.Join("..", "..", "cotilla-bootstrap")
-	if _, err := os.Stat(cbDir); err != nil {
-		t.Skip("cotilla-bootstrap directory not present")
+	if _, err := os.Stat(filepath.Join(cbDir, "index.html")); err != nil {
+		t.Skip("cotilla-bootstrap submodule not initialized")
 	}
 
 	// 1. Check index.html source
