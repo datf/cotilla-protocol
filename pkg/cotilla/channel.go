@@ -143,6 +143,7 @@ type ChannelState struct {
 	syncBatchSize    int
 	queriedSyncPeers map[string]bool
 	syncActive       bool
+	syncLastReqAt    time.Time
 	syncLastRespAt   time.Time
 
 	// Public App Distribution metadata

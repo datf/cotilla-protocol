@@ -380,7 +380,7 @@ func (n *Node) handleWelcomeCommit(ch *ChannelState, commit *EpochCommit) {
 	if n.Hooks.OnEpochCommit != nil {
 		n.Hooks.OnEpochCommit(commit)
 	}
-	go n.RequestCatchUpForChannel(ch.RoomID)
+	n.triggerCatchUpForChannel(ch.RoomID)
 	go n.checkPendingAdmissionsInChannel(ch.RoomID)
 }
 
@@ -427,7 +427,7 @@ func (n *Node) handleMemberCommit(ch *ChannelState, commit *EpochCommit) {
 			ch.pendingCommits[commit.EpochID] = commit
 		}
 		n.mu.Unlock()
-		go n.RequestCatchUpForChannel(ch.RoomID)
+		n.triggerCatchUpForChannel(ch.RoomID)
 		return
 	}
 	if err := n.applyMLSCommitLocked(ch, commit); err != nil {

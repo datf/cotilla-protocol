@@ -104,7 +104,7 @@ func (n *Node) deliverLocal(from string, pkt *Packet) {
 	n.mu.RUnlock()
 	if err != nil {
 		if shouldCatchUp {
-			go n.RequestCatchUpForChannel(roomID)
+			n.triggerCatchUpForChannel(roomID)
 		}
 		return
 	}

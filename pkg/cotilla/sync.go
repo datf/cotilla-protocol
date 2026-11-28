@@ -24,9 +24,37 @@ func recordSeenEnvelopeLocked(ch *ChannelState, id string) {
 	ch.lastSeenMsgID = id
 }
 
+const syncCoalesceWindow = 250 * time.Millisecond
+
 // RequestCatchUp initiates expanding-ring targeted catch-up sync for the primary channel.
 func (n *Node) RequestCatchUp() error {
 	return n.RequestCatchUpForChannel(n.RoomID)
+}
+
+// triggerCatchUpForChannel starts expanding-ring sync for reactive internal triggers
+// (e.g. undecryptable future-epoch packets or out-of-order commits), coalescing bursts
+// into the active sync loop so packet bursts cannot cause PortSyncReq amplification storms.
+func (n *Node) triggerCatchUpForChannel(channelID string) {
+	n.mu.RLock()
+	ch := n.channelLocked(channelID)
+	n.mu.RUnlock()
+	if ch == nil {
+		return
+	}
+	now := time.Now()
+	ch.syncMutex.Lock()
+	if ch.syncActive || (!ch.syncLastReqAt.IsZero() && now.Sub(ch.syncLastReqAt) < syncCoalesceWindow) {
+		ch.syncMutex.Unlock()
+		return
+	}
+	ch.syncBatchSize = 1
+	ch.queriedSyncPeers = make(map[string]bool)
+	ch.syncLastRespAt = time.Time{}
+	ch.syncLastReqAt = now
+	ch.syncActive = true
+	ch.syncMutex.Unlock()
+
+	go n.runExpandingSyncLoop(ch)
 }
 
 // RequestCatchUpForChannel starts expanding-ring targeted sync (1 -> 2 -> 4 -> 8...) for channelID.
@@ -37,11 +65,17 @@ func (n *Node) RequestCatchUpForChannel(channelID string) error {
 	if ch == nil {
 		return fmt.Errorf("cotilla: not joined to channel %s", channelID)
 	}
+	now := time.Now()
 	ch.syncMutex.Lock()
+	alreadyActive := ch.syncActive
+	if alreadyActive && !ch.syncLastReqAt.IsZero() && now.Sub(ch.syncLastReqAt) < syncCoalesceWindow {
+		ch.syncMutex.Unlock()
+		return nil
+	}
 	ch.syncBatchSize = 1
 	ch.queriedSyncPeers = make(map[string]bool)
 	ch.syncLastRespAt = time.Time{}
-	alreadyActive := ch.syncActive
+	ch.syncLastReqAt = now
 	ch.syncActive = true
 	ch.syncMutex.Unlock()
 
@@ -105,6 +139,11 @@ func (n *Node) RequestCatchUpNextBatchForChannel(channelID string) ([]string, er
 	n.mu.RUnlock()
 
 	targets := n.pickSyncTargets(ch)
+	if len(targets) > 0 {
+		ch.syncMutex.Lock()
+		ch.syncLastReqAt = time.Now()
+		ch.syncMutex.Unlock()
+	}
 	for _, peer := range targets {
 		_ = n.sendBootstrapGroupPacket(ch, peer, PortSyncReq, req)
 	}
@@ -230,6 +269,10 @@ func (n *Node) handleSyncRes(from string, res *SyncResponse) {
 	ch.syncLastRespAt = time.Now()
 	ch.syncMutex.Unlock()
 
+	n.mu.RLock()
+	epochBefore := ch.currentEpoch
+	n.mu.RUnlock()
+
 	for _, c := range res.Commits {
 		n.handleEpochCommitInternal(from, c, n.Cfg.MessageTTL)
 	}
@@ -239,7 +282,13 @@ func (n *Node) handleSyncRes(from string, res *SyncResponse) {
 	for _, meta := range res.Offers {
 		n.handleAttachMeta(from, meta)
 	}
+
 	if len(res.Commits) > 0 {
-		go func() { _, _ = n.RequestCatchUpNextBatchForChannel(ch.RoomID) }()
+		n.mu.RLock()
+		epochAfter := ch.currentEpoch
+		n.mu.RUnlock()
+		if epochAfter > epochBefore {
+			go func() { _, _ = n.RequestCatchUpNextBatchForChannel(ch.RoomID) }()
+		}
 	}
 }

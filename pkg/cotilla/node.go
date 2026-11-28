@@ -460,10 +460,15 @@ func (n *Node) processEnvelope(env *Envelope, maxSkew time.Duration, isCatchUp b
 	if env == nil {
 		return false
 	}
+	envID := env.ID()
 	n.mu.RLock()
 	ch := n.channelLocked(env.RoomID)
+	alreadySeen := false
+	if ch != nil {
+		_, alreadySeen = ch.seenEnvelopes[envID]
+	}
 	n.mu.RUnlock()
-	if ch == nil {
+	if ch == nil || alreadySeen {
 		return false
 	}
 	if err := env.Verify(ch.RoomID, maxSkew); err != nil {

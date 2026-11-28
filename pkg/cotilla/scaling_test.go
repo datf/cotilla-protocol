@@ -2110,3 +2110,180 @@ func TestGroupDiscover_ExpandingRingAcrossTwoHopsWithMLS(t *testing.T) {
 	defer mu.Unlock()
 	t.Fatalf("2-hop MLS group discovery failed: daveSawBob=%v bobSawDave=%v", daveSawBob, bobSawDave)
 }
+
+type syncCountingTransport struct {
+	*memoryTransport
+	roomKey    RoomKey
+	syncReqs   atomic.Int64
+	dropSyncTx atomic.Bool
+}
+
+func (s *syncCountingTransport) Send(addr string, data []byte) error {
+	if pkt, err := UnmarshalPacket(data); err == nil && pkt.Encrypted && pkt.ChannelHash != 0 {
+		if sd, err := OpenGroupPacket(s.roomKey, pkt); err == nil && sd.Port == PortSyncReq {
+			s.syncReqs.Add(1)
+			if s.dropSyncTx.Load() {
+				return nil
+			}
+		}
+	}
+	return s.memoryTransport.Send(addr, data)
+}
+
+// TestSyncCatchUp_CoalescesFutureEpochBurst verifies two amplification-storm invariants:
+// 1. Receiving a burst of 50 undecryptable future-epoch packets coalesces into <= 2 PortSyncReq
+//    packets instead of spawning 50 parallel catch-up storms.
+// 2. Receiving duplicate PortSyncRes packets carrying already-applied MLS commits and already-seen
+//    envelopes emits 0 additional PortSyncReq packets and 0 duplicate OnMessage deliveries.
+func TestSyncCatchUp_CoalescesFutureEpochBurst(t *testing.T) {
+	roomID := "room-sync-coalesce-burst"
+	roomKey, _ := GenerateRoomKey()
+	cfg := DefaultConfig()
+
+	var daveMsgs atomic.Int64
+	alice, trAlice := newTestNode(t, "seed-sync-burst-alice-01", roomID, roomKey, cfg, Hooks{})
+	bob, trBob := newTestNode(t, "seed-sync-burst-bob-02", roomID, roomKey, cfg, Hooks{})
+	charlie, trCharlie := newTestNode(t, "seed-sync-burst-charlie-03", roomID, roomKey, cfg, Hooks{})
+
+	daveID, _ := NewIdentityFromSeed([]byte("seed-sync-burst-dave-04"))
+	daveMem := newMemoryTransport(daveID.Address())
+	daveWrap := &syncCountingTransport{memoryTransport: daveMem, roomKey: roomKey}
+	dave := NewNode(daveID, roomID, roomKey, cfg, daveWrap, Hooks{
+		OnMessage: func(env *Envelope, pt []byte) { daveMsgs.Add(1) },
+	})
+	daveMem.onData = dave.HandleWire
+
+	defer func() {
+		alice.StopMeshSupervisor()
+		bob.StopMeshSupervisor()
+		charlie.StopMeshSupervisor()
+		dave.StopMeshSupervisor()
+	}()
+
+	// 1. Establish 4-peer MLS mesh at epoch 4.
+	if err := alice.InitGenesisEpoch(); err != nil {
+		t.Fatalf("alice InitGenesisEpoch: %v", err)
+	}
+	invB, _ := alice.CreateChannelInvite(15 * time.Minute)
+	invC, _ := alice.CreateChannelInvite(15 * time.Minute)
+	invD, _ := alice.CreateChannelInvite(15 * time.Minute)
+	bob.SetChannelInvite(invB)
+	charlie.SetChannelInvite(invC)
+	dave.SetChannelInvite(invD)
+	connectFullMesh([]*Node{alice, bob, charlie, dave}, []*memoryTransport{trAlice, trBob, trCharlie, daveMem})
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if alice.CurrentEpoch() >= 4 &&
+			bob.CurrentEpoch() == alice.CurrentEpoch() &&
+			charlie.CurrentEpoch() == alice.CurrentEpoch() &&
+			dave.CurrentEpoch() == alice.CurrentEpoch() {
+			break
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	if dave.CurrentEpoch() < 4 {
+		t.Fatalf("expected dave at MLS epoch >= 4, got %d", dave.CurrentEpoch())
+	}
+
+	// 2. Disconnect dave and ratchet alice/bob/charlie to epoch 5 so dave is 1 epoch behind.
+	trAlice.Disconnect(daveMem)
+	trBob.Disconnect(daveMem)
+	trCharlie.Disconnect(daveMem)
+	dave.RemovePeer(alice.Address())
+	dave.RemovePeer(bob.Address())
+	dave.RemovePeer(charlie.Address())
+
+	commit5, err := alice.RotateEpochKey()
+	if err != nil {
+		t.Fatalf("RotateEpochKey: %v", err)
+	}
+	for wait := time.Now(); time.Since(wait) < 2*time.Second; {
+		if bob.CurrentEpoch() >= commit5.EpochID && charlie.CurrentEpoch() >= commit5.EpochID {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Build 50 encrypted epoch-5 chat packets on alice (and store them in alice's ring buffer).
+	const burstSize = 50
+	futurePackets := make([][]byte, 0, burstSize)
+	for i := 0; i < burstSize; i++ {
+		env, err := alice.SendMessage(fmt.Sprintf("epoch5-burst-%03d", i))
+		if err != nil {
+			t.Fatalf("SendMessage(%d): %v", i, err)
+		}
+		alice.mu.RLock()
+		pkt, err := NewGroupPacket(alice.ID, BroadcastAddr, alice.ChannelState.ChannelHash, commit5.EpochID, alice.ChannelState.RoomKey, PortChat, 1, env)
+		alice.mu.RUnlock()
+		if err != nil {
+			t.Fatalf("NewGroupPacket(%d): %v", i, err)
+		}
+		raw, err := MarshalPacket(pkt)
+		if err != nil {
+			t.Fatalf("MarshalPacket(%d): %v", i, err)
+		}
+		futurePackets = append(futurePackets, raw)
+	}
+
+	// 3. Reconnect dave, drop outgoing PortSyncReq temporarily so dave stays at epoch 4
+	// throughout the burst, and feed all 50 future-epoch packets into dave.HandleWire.
+	daveWrap.dropSyncTx.Store(true)
+	daveWrap.syncReqs.Store(0)
+	trAlice.Connect(daveMem)
+	trBob.Connect(daveMem)
+	trCharlie.Connect(daveMem)
+	dave.AddPeer(alice.Address())
+	dave.AddPeer(bob.Address())
+	dave.AddPeer(charlie.Address())
+
+	for _, raw := range futurePackets {
+		dave.HandleWire(alice.Address(), raw)
+	}
+	time.Sleep(150 * time.Millisecond)
+
+	if gotReqs := daveWrap.syncReqs.Load(); gotReqs > 2 {
+		t.Errorf("future-epoch burst amplification storm: dave sent %d PortSyncReq packets for %d future-epoch messages (want <= 2)", gotReqs, burstSize)
+	}
+
+	// 4. Allow PortSyncReq through and verify dave catches up to epoch 5 and receives all 50 messages.
+	daveWrap.dropSyncTx.Store(false)
+	if err := dave.RequestCatchUp(); err != nil {
+		t.Fatalf("dave RequestCatchUp: %v", err)
+	}
+	catchDeadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(catchDeadline) {
+		if dave.CurrentEpoch() >= commit5.EpochID && daveMsgs.Load() >= burstSize {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if dave.CurrentEpoch() < commit5.EpochID || daveMsgs.Load() != burstSize {
+		t.Fatalf("dave failed to catch up: epoch=%d (want %d), msgs=%d (want %d)", dave.CurrentEpoch(), commit5.EpochID, daveMsgs.Load(), burstSize)
+	}
+
+	// 5. Deliver 10 duplicate PortSyncRes packets carrying already-applied commit5 and all 50
+	// already-seen envelopes; assert 0 additional PortSyncReq packets and 0 duplicate deliveries.
+	time.Sleep(100 * time.Millisecond)
+	daveWrap.syncReqs.Store(0)
+	alice.mu.RLock()
+	dupRes := alice.buildSyncResponseLocked(alice.ChannelState, dave.Address(), &SyncRequest{
+		RoomID:       roomID,
+		CurrentEpoch: commit5.EpochID - 1,
+	})
+	alice.mu.RUnlock()
+	if len(dupRes.Commits) == 0 || len(dupRes.Envelopes) == 0 {
+		t.Fatalf("expected non-empty duplicate SyncResponse, got commits=%d envelopes=%d", len(dupRes.Commits), len(dupRes.Envelopes))
+	}
+	for i := 0; i < 10; i++ {
+		dave.handleSyncRes(alice.Address(), &dupRes)
+	}
+	time.Sleep(150 * time.Millisecond)
+
+	if extraReqs := daveWrap.syncReqs.Load(); extraReqs != 0 {
+		t.Errorf("duplicate PortSyncRes commit storm: dave sent %d extra PortSyncReq packets for already-applied commits (want 0)", extraReqs)
+	}
+	if got := daveMsgs.Load(); got != burstSize {
+		t.Errorf("duplicate PortSyncRes delivered duplicate messages: got %d, want %d", got, burstSize)
+	}
+}
