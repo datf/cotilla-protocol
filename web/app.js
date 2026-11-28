@@ -65,8 +65,18 @@ window.state = state;
 const seenAttachments = new Set();
 window.seenAttachments = seenAttachments;
 
+function isSafeBlobUrl(url) {
+  if (typeof url !== "string") return false;
+  try {
+    const parsed = new URL(url, window.location.href);
+    return parsed.protocol === "blob:";
+  } catch {
+    return false;
+  }
+}
+
 function trackBlobUrl(url) {
-  if (url && typeof url === "string" && url.startsWith("blob:")) {
+  if (isSafeBlobUrl(url)) {
     state.blobUrls.add(url);
   }
   return url;
@@ -592,7 +602,7 @@ function formatBytes(bytes) {
 
 function createSaveLink(blobUrl, name) {
   const a = document.createElement("a");
-  if (typeof blobUrl === "string" && blobUrl.startsWith("blob:")) {
+  if (isSafeBlobUrl(blobUrl)) {
     a.href = blobUrl;
   }
   a.download = name;
