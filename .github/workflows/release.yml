@@ -175,6 +175,6 @@ jobs:
           tgz="$(ls datf-cotilla-wasm-*.tgz)"
           tag_flag=""
           if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
-            tag_flag="--tag stage"
+            tag_flag="--tag next"
           fi
           npm publish "./${tgz}" --provenance --access public ${tag_flag}
