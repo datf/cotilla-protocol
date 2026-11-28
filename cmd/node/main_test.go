@@ -271,10 +271,33 @@ func TestNodeDaemon_PureWebRTCSignalingAndMultiChannelMLS(t *testing.T) {
 	}
 	for i := 1; i < 3; i++ {
 		daemons[i].node.SetChannelInviteForChannel(betaID, invB)
+		_ = daemons[i].node.JoinChannel(betaID)
 	}
-	time.Sleep(400 * time.Millisecond)
 
-	// Wait for MLS epochs to sync for both channels before sending messages, or verify epoch >= 1 on alpha and beta.
+	// Wait for MLS epochs to converge across all members of both channels before sending messages.
+	// Genesis epoch is 1; admitting 3 peers into alpha reaches epoch >= 4, admitting 2 peers into beta reaches epoch >= 3.
+	syncDeadline := time.Now().Add(6 * time.Second)
+	for time.Now().Before(syncDeadline) {
+		alphaEpoch0 := daemons[0].node.ChannelCurrentEpoch(alphaID)
+		betaEpoch0 := daemons[0].node.ChannelCurrentEpoch(betaID)
+		alphaSynced := alphaEpoch0 >= 4
+		for i := 1; i < 4 && alphaSynced; i++ {
+			if daemons[i].node.ChannelCurrentEpoch(alphaID) != alphaEpoch0 {
+				alphaSynced = false
+			}
+		}
+		betaSynced := betaEpoch0 >= 3
+		for i := 1; i < 3 && betaSynced; i++ {
+			if daemons[i].node.ChannelCurrentEpoch(betaID) != betaEpoch0 {
+				betaSynced = false
+			}
+		}
+		if alphaSynced && betaSynced {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
 	alphaSecretMsg := "alpha-webrtc-mls-msg-991"
 	betaSecretMsg := "beta-webrtc-mls-msg-882"
 	if _, err := daemons[0].node.SendChannelMessage(alphaID, alphaSecretMsg); err != nil {
